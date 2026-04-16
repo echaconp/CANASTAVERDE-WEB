@@ -192,8 +192,11 @@
   .badge-organicos { background: var(--purple-50); color: var(--purple-600); }
 
   .card-name { font-size: 15px; font-weight: 600; margin-bottom: 2px; }
-  .card-unit, .card-quality { font-size: 12px; color: var(--muted); }
-  .card-quality { margin-bottom: .65rem; }
+  .card-unit, .card-quality, .card-variants {
+    font-size: 12px; color: var(--muted);
+  }
+  .card-quality { margin-bottom: .35rem; }
+  .card-variants { margin-bottom: .65rem; }
   .card-footer { display: flex; align-items: center; justify-content: space-between; }
   .card-price { font-size: 16px; font-weight: 700; color: var(--green-600); }
   .add-btn {
@@ -304,6 +307,117 @@
     text-align: center;
     padding: 3rem; color: var(--muted); font-size: 15px;
   }
+
+  .variant-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.45);
+    z-index: 300;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+  }
+  .variant-overlay.open { display: flex; }
+  .variant-modal {
+    width: 100%;
+    max-width: 560px;
+    background: white;
+    border-radius: 18px;
+    border: 1px solid var(--border);
+    box-shadow: 0 12px 40px rgba(0,0,0,0.16);
+    overflow: hidden;
+  }
+  .variant-head {
+    padding: 18px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+  }
+  .variant-title-wrap {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .variant-emoji {
+    font-size: 34px;
+  }
+  .variant-head h3 {
+    font-size: 20px;
+    margin-bottom: 2px;
+  }
+  .variant-head p {
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .variant-close {
+    background: white;
+    border: 1px solid var(--border);
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 18px;
+  }
+  .variant-body {
+    padding: 18px 20px 20px;
+  }
+  .variant-list {
+    display: grid;
+    gap: 10px;
+  }
+  .variant-option {
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 14px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    cursor: pointer;
+    background: white;
+  }
+  .variant-option:hover {
+    border-color: var(--green-400);
+    box-shadow: 0 6px 18px rgba(0,0,0,0.06);
+  }
+  .variant-left {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .variant-quality {
+    font-size: 15px;
+    font-weight: 700;
+  }
+  .variant-unit {
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .variant-price {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--green-600);
+    white-space: nowrap;
+  }
+  .variant-add {
+    background: var(--green-600);
+    color: white;
+    border: none;
+    border-radius: 10px;
+    padding: 10px 14px;
+    cursor: pointer;
+    font-weight: 600;
+  }
+
+  @media (max-width: 768px) {
+    nav { padding: 0 1rem; }
+    .hero { padding: 3rem 1rem; }
+    main { padding: 2rem 1rem 5rem; }
+    .cart-panel { width: 100%; }
+  }
 </style>
 </head>
 <body>
@@ -368,6 +482,24 @@
   </div>
 </div>
 
+<div class="variant-overlay" id="variant-overlay" onclick="handleVariantOverlayClick(event)">
+  <div class="variant-modal">
+    <div class="variant-head">
+      <div class="variant-title-wrap">
+        <div class="variant-emoji" id="variant-product-emoji">🛒</div>
+        <div>
+          <h3 id="variant-product-name">Producto</h3>
+          <p id="variant-product-group">Grupo</p>
+        </div>
+      </div>
+      <button class="variant-close" onclick="closeVariantModal()">✕</button>
+    </div>
+    <div class="variant-body">
+      <div class="variant-list" id="variant-list"></div>
+    </div>
+  </div>
+</div>
+
 <a id="wa-float" href="#" class="wa-float" target="_blank" title="Contáctanos por WhatsApp">💬</a>
 
 <div class="toast" id="toast"></div>
@@ -383,7 +515,7 @@
   const WA_NUMBER = "51964117919";
   const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbypjAQtNlwYvAB40y056XJbbYBK78-btsq8188IPwd_Srcwe8VaUsabcy1HVeER4TE_RQ/exec";
 
-  const products = [
+  const productVariants = [
   {
     "id": 1,
     "group": "Tubérculos y raíces",
@@ -937,19 +1069,93 @@
 
   let cart = {};
   let currentCat = "todos";
+  let selectedProductKey = null;
 
-  function slugify(text) {
-    return text
+  function normalizeText(text) {
+    return (text || "")
+      .toString()
+      .trim()
       .toLowerCase()
       .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-+|-+$/g, "");
+      .replace(/[\u0300-\u036f]/g, "");
+  }
+
+  function slugify(text) {
+    return normalizeText(text).replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  }
+
+  function qualityOrder(q) {
+    const value = normalizeText(q);
+    if (value === "1ra") return 1;
+    if (value === "2da") return 2;
+    if (value === "3ra") return 3;
+    return 99;
+  }
+
+  function getGroupedProducts() {
+    const map = {};
+
+    productVariants.forEach(item => {
+      const key = `${item.group}|||${item.name}`;
+      if (!map[key]) {
+        map[key] = {
+          key,
+          group: item.group,
+          name: item.name,
+          emoji: item.emoji,
+          variants: []
+        };
+      }
+      map[key].variants.push({ ...item });
+    });
+
+    const grouped = Object.values(map).map(product => {
+      product.variants.sort((a, b) => qualityOrder(a.quality) - qualityOrder(b.quality));
+      product.minPrice = Math.min(...product.variants.map(v => Number(v.price) || 0));
+      product.maxPrice = Math.max(...product.variants.map(v => Number(v.price) || 0));
+      product.units = [...new Set(product.variants.map(v => v.unit).filter(Boolean))];
+      product.qualities = product.variants.map(v => v.quality).filter(Boolean);
+      return product;
+    });
+
+    grouped.sort((a, b) => {
+      if (a.group !== b.group) return a.group.localeCompare(b.group, "es");
+      return a.name.localeCompare(b.name, "es");
+    });
+
+    return grouped;
+  }
+
+  function formatPriceRange(product) {
+    if (product.minPrice === product.maxPrice) {
+      return `S/ ${product.minPrice.toFixed(2)}`;
+    }
+    return `Desde S/ ${product.minPrice.toFixed(2)}`;
+  }
+
+  function getFilteredGroupedProducts() {
+    const q = normalizeText(document.getElementById("search").value);
+    const groupedProducts = getGroupedProducts();
+
+    return groupedProducts.filter(product => {
+      const categoryOk = currentCat === "todos" || product.group === currentCat;
+
+      const searchBase = [
+        product.name,
+        product.group,
+        product.units.join(" "),
+        product.qualities.join(" "),
+        product.variants.map(v => `${v.quality} ${v.unit}`).join(" ")
+      ].join(" ");
+
+      const searchOk = !q || normalizeText(searchBase).includes(q);
+      return categoryOk && searchOk;
+    });
   }
 
   function setupCategoryButtons() {
     const container = document.getElementById("category-buttons");
-    const groups = [...new Set(products.map(p => p.group))];
+    const groups = [...new Set(productVariants.map(p => p.group))];
 
     const buttons = [
       `<button class="cat-btn active" onclick="setCategory('todos', this)">Todos</button>`
@@ -972,12 +1178,7 @@
   }
 
   function renderGrid() {
-    const q = document.getElementById("search").value.toLowerCase().trim();
-    const filtered = products.filter(p =>
-      (currentCat === "todos" || p.group === currentCat) &&
-      (`${p.name} ${p.quality} ${p.unit}`.toLowerCase().includes(q))
-    );
-
+    const filtered = getFilteredGroupedProducts();
     document.getElementById("count-label").textContent = `${filtered.length} productos`;
 
     const wrapper = document.getElementById("product-sections");
@@ -986,30 +1187,40 @@
       return;
     }
 
-    const grouped = {};
-    filtered.forEach(p => {
-      if (!grouped[p.group]) grouped[p.group] = [];
-      grouped[p.group].push(p);
+    const groupedByCategory = {};
+    filtered.forEach(product => {
+      if (!groupedByCategory[product.group]) groupedByCategory[product.group] = [];
+      groupedByCategory[product.group].push(product);
     });
 
     let html = "";
-    Object.keys(grouped).forEach(group => {
+    Object.keys(groupedByCategory).forEach(group => {
       const icon = GROUP_META[group]?.icon || "🛒";
       const badge = GROUP_META[group]?.badge || "badge-verduras";
+      const items = groupedByCategory[group];
+
       html += `
         <section class="group-section">
-          <div class="group-title">${icon} ${group} <small>${grouped[group].length} productos</small></div>
+          <div class="group-title">${icon} ${group} <small>${items.length} productos</small></div>
           <div class="grid">
-            ${grouped[group].map(p => `
-              <div class="card" onclick="addToCart(${p.id})">
-                <span class="card-emoji">${p.emoji}</span>
+            ${items.map(product => `
+              <div class="card" onclick="openVariantModal('${product.key}')">
+                <span class="card-emoji">${product.emoji}</span>
                 <span class="badge-cat ${badge}">${group}</span>
-                <div class="card-name">${p.name}</div>
-                <div class="card-unit">${p.unit || 'unidad'}</div>
-                <div class="card-quality">${p.quality ? 'Calidad: ' + p.quality : ''}</div>
+                <div class="card-name">${product.name}</div>
+                <div class="card-unit">${product.units[0] || 'unidad'}</div>
+                <div class="card-quality">
+                  ${product.variants.length > 1
+                    ? product.variants.length + ' calidades disponibles'
+                    : (product.qualities[0] ? 'Calidad: ' + product.qualities[0] : 'Disponible')
+                  }
+                </div>
+                <div class="card-variants">
+                  ${product.qualities.length ? product.qualities.join(' · ') : 'Sin calidad'}
+                </div>
                 <div class="card-footer">
-                  <span class="card-price">S/ ${p.price.toFixed(2)}</span>
-                  <button class="add-btn" onclick="event.stopPropagation(); addToCart(${p.id})">+</button>
+                  <span class="card-price">${formatPriceRange(product)}</span>
+                  <button class="add-btn" onclick="event.stopPropagation(); openVariantModal('${product.key}')">+</button>
                 </div>
               </div>
             `).join("")}
@@ -1021,11 +1232,58 @@
     wrapper.innerHTML = html;
   }
 
-  function addToCart(id) {
+  function openVariantModal(productKey) {
+    selectedProductKey = productKey;
+    const product = getGroupedProducts().find(p => p.key === productKey);
+    if (!product) return;
+
+    document.getElementById("variant-product-emoji").textContent = product.emoji || "🛒";
+    document.getElementById("variant-product-name").textContent = product.name;
+    document.getElementById("variant-product-group").textContent = product.group;
+
+    const list = document.getElementById("variant-list");
+    list.innerHTML = product.variants.map(variant => `
+      <div class="variant-option">
+        <div class="variant-left">
+          <div class="variant-quality">${variant.quality || 'Presentación única'}</div>
+          <div class="variant-unit">${variant.unit || 'unidad'}</div>
+        </div>
+        <div style="display:flex; align-items:center; gap:10px;">
+          <div class="variant-price">S/ ${variant.price.toFixed(2)}</div>
+          <button class="variant-add" onclick="addVariantToCart(${variant.id})">Agregar</button>
+        </div>
+      </div>
+    `).join("");
+
+    document.getElementById("variant-overlay").classList.add("open");
+    document.body.style.overflow = "hidden";
+  }
+
+  function closeVariantModal() {
+    document.getElementById("variant-overlay").classList.remove("open");
+    selectedProductKey = null;
+    if (!document.getElementById("cart-overlay").classList.contains("open")) {
+      document.body.style.overflow = "";
+    }
+  }
+
+  function handleVariantOverlayClick(e) {
+    if (e.target === document.getElementById("variant-overlay")) {
+      closeVariantModal();
+    }
+  }
+
+  function addVariantToCart(id) {
     cart[id] = (cart[id] || 0) + 1;
-    const p = products.find(x => x.id === id);
-    showToast(`${p.emoji} ${p.name} agregado al carrito`);
+    const p = productVariants.find(x => x.id === id);
+    showToast(`${p.emoji} ${p.name}${p.quality ? ' - ' + p.quality : ''} agregado al carrito`);
+    closeVariantModal();
     updateCartUI();
+    openCart();
+  }
+
+  function addToCart(id) {
+    addVariantToCart(id);
   }
 
   function removeFromCart(id) {
@@ -1044,7 +1302,7 @@
     const keys = Object.keys(cart);
     const totalQty = keys.reduce((s, id) => s + cart[id], 0);
     const totalPrice = keys.reduce((s, id) => {
-      const p = products.find(x => x.id == id);
+      const p = productVariants.find(x => x.id == id);
       return s + cart[id] * p.price;
     }, 0);
 
@@ -1063,7 +1321,7 @@
       container.innerHTML = '<div class="empty-cart"><p>🛒</p>Tu carrito está vacío.<br>¡Agrega productos para empezar!</div>';
     } else {
       container.innerHTML = keys.map(id => {
-        const p = products.find(x => x.id == id);
+        const p = productVariants.find(x => x.id == id);
         return `
           <div class="cart-item">
             <span class="ci-emoji">${p.emoji}</span>
@@ -1075,7 +1333,7 @@
             <div class="ci-controls">
               <button class="ci-btn" onclick="removeFromCart(${p.id})">−</button>
               <span class="ci-qty">${cart[id]}</span>
-              <button class="ci-btn" onclick="addToCart(${p.id})">+</button>
+              <button class="ci-btn" onclick="addVariantToCart(${p.id})">+</button>
             </div>
           </div>
         `;
@@ -1095,7 +1353,7 @@
     msg += `%0A`;
 
     keys.forEach(id => {
-      const p = products.find(x => x.id == id);
+      const p = productVariants.find(x => x.id == id);
       msg += `✅ ${p.emoji} *${p.name}*`;
       if (p.quality) msg += ` (${p.quality})`;
       msg += ` x${cart[id]} — S/ ${(cart[id] * p.price).toFixed(2)}%0A`;
@@ -1123,7 +1381,7 @@
     }
 
     const items = keys.map(id => {
-      const p = products.find(x => x.id == id);
+      const p = productVariants.find(x => x.id == id);
       return {
         id: p.id,
         group: p.group,
@@ -1172,7 +1430,9 @@
 
   function closeCart() {
     document.getElementById("cart-overlay").classList.remove("open");
-    document.body.style.overflow = "";
+    if (!document.getElementById("variant-overlay").classList.contains("open")) {
+      document.body.style.overflow = "";
+    }
   }
 
   function handleOverlayClick(e) {
