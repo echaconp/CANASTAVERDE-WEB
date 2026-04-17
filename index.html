@@ -593,7 +593,7 @@
 
 <script>
   const WA_NUMBER = "51964117919";
-  const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbypjAQtNlwYvAB40y056XJbbYBK78-btsq8188IPwd_Srcwe8VaUsabcy1HVeER4TE_RQ/exec";
+  const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyq7YhCqIFfsKy2qjbajQmuYe_4yOPUKOSezfwItyoGMEMzEsXfSRcFL0HBFTBLxCn0Og/exec";
 
   const productVariants = [
   {
@@ -1271,6 +1271,45 @@
   let currentCat = "todos";
   let selectedProductKey = null;
 
+  function pad2(n) {
+    return String(n).padStart(2, "0");
+  }
+
+  function getOrderTimestamp() {
+    const now = new Date();
+
+    const fecha =
+      now.getFullYear() + "-" +
+      pad2(now.getMonth() + 1) + "-" +
+      pad2(now.getDate());
+
+    const hora =
+      pad2(now.getHours()) + ":" +
+      pad2(now.getMinutes()) + ":" +
+      pad2(now.getSeconds());
+
+    return {
+      iso: now.toISOString(),
+      date: fecha,
+      time: hora,
+      display: `${fecha} ${hora}`
+    };
+  }
+
+  function generateOrderCode() {
+    const now = new Date();
+    const random = Math.floor(1000 + Math.random() * 9000);
+
+    return "PED-" +
+      now.getFullYear() +
+      pad2(now.getMonth() + 1) +
+      pad2(now.getDate()) + "-" +
+      pad2(now.getHours()) +
+      pad2(now.getMinutes()) +
+      pad2(now.getSeconds()) + "-" +
+      random;
+  }
+
   function normalizeText(text) {
     return (text || "")
       .toString()
@@ -1532,9 +1571,6 @@
   function addVariantToCart(id) {
     const qty = getVariantQty(id);
     addToCart(id, qty, { closeVariantModal: true });
-    // IMPORTANTE:
-    // ya NO abrimos el carrito aquí
-    // el usuario puede seguir comprando y abrir "Mi carrito" cuando quiera
   }
 
   function increaseCartItem(id) {
@@ -1603,9 +1639,12 @@
     document.getElementById("wa-float").href = `https://wa.me/${WA_NUMBER}?text=${floatMsg}`;
   }
 
-  function buildWhatsappMessage(customerName, customerPhone, customerNotes, totalPrice) {
+  function buildWhatsappMessage(customerName, customerPhone, customerNotes, totalPrice, orderCode, orderTimestamp) {
     const keys = Object.keys(cart);
     let msg = `¡Hola! Quiero hacer un pedido en *La Canasta Verde*:%0A%0A`;
+    msg += `🧾 *Código de pedido:* ${orderCode}%0A`;
+    msg += `📅 *Fecha de registro:* ${orderTimestamp.date}%0A`;
+    msg += `⏰ *Hora de registro:* ${orderTimestamp.time}%0A`;
     msg += `👤 *Nombre:* ${customerName}%0A`;
     if (customerPhone) msg += `📱 *Celular:* ${customerPhone}%0A`;
     if (customerNotes) msg += `📝 *Referencia:* ${customerNotes}%0A`;
@@ -1620,7 +1659,9 @@
       msg += ` x${cart[id]} — S/ ${(cart[id] * p.price).toFixed(2)}%0A`;
     });
 
-    msg += `%0A*Total: S/ ${totalPrice.toFixed(2)}*%0A%0APor favor confirmar disponibilidad y horario de entrega. Gracias.`;
+    msg += `%0A*Total: S/ ${totalPrice.toFixed(2)}*%0A%0A`;
+    msg += `Por favor confirmar disponibilidad y horario de entrega. Gracias.`;
+
     return `https://wa.me/${WA_NUMBER}?text=${msg}`;
   }
 
@@ -1657,13 +1698,20 @@
 
     const totalPrice = items.reduce((s, x) => s + x.subtotal, 0);
 
+    const orderTimestamp = getOrderTimestamp();
+    const orderCode = generateOrderCode();
+
     const payload = {
+      order_code: orderCode,
+      order_date: orderTimestamp.date,
+      order_time: orderTimestamp.time,
+      order_datetime: orderTimestamp.display,
       customer_name: customerName,
       customer_phone: customerPhone,
       customer_notes: customerNotes,
       total: +totalPrice.toFixed(2),
       items: items,
-      created_at: new Date().toISOString()
+      created_at: orderTimestamp.iso
     };
 
     try {
@@ -1680,7 +1728,15 @@
       console.error("No se pudo guardar el pedido:", error);
     }
 
-    const waUrl = buildWhatsappMessage(customerName, customerPhone, customerNotes, totalPrice);
+    const waUrl = buildWhatsappMessage(
+      customerName,
+      customerPhone,
+      customerNotes,
+      totalPrice,
+      orderCode,
+      orderTimestamp
+    );
+
     window.open(waUrl, "_blank");
   }
 
