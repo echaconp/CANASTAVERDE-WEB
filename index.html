@@ -267,7 +267,55 @@
     background: #fff;
     color: var(--text);
   }
-  .cart-form textarea { min-height: 74px; resize: vertical; }
+
+  .cart-form textarea {
+    min-height: 74px;
+    resize: vertical;
+  }
+
+  .delivery-date-wrap {
+    position: relative;
+  }
+
+  .delivery-date-wrap::before {
+    content: "Fecha de entrega";
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--muted);
+    font-size: 14px;
+    pointer-events: none;
+    background: #fff;
+    transition: opacity .15s ease;
+  }
+
+  .delivery-date-wrap.has-value::before,
+  .delivery-date-wrap:focus-within::before {
+    opacity: 0;
+  }
+
+  #delivery-date {
+    position: relative;
+    color: transparent;
+    cursor: pointer;
+  }
+
+  #delivery-date::-webkit-calendar-picker-indicator {
+    cursor: pointer;
+    opacity: 1;
+  }
+
+  #delivery-date::-webkit-datetime-edit {
+    color: transparent;
+  }
+
+  .delivery-date-wrap.has-value #delivery-date,
+  .delivery-date-wrap.has-value #delivery-date::-webkit-datetime-edit,
+  #delivery-date:focus,
+  #delivery-date:focus::-webkit-datetime-edit {
+    color: var(--text);
+  }
 
   .cart-total-row {
     display: flex; justify-content: space-between; align-items: center;
@@ -283,6 +331,7 @@
     border: none; border-radius: var(--radius-lg);
     font-size: 16px; font-weight: 600; cursor: pointer;
   }
+
   .wa-btn:disabled {
     opacity: 0.75;
     cursor: not-allowed;
@@ -560,13 +609,26 @@
       <div class="cart-form">
         <input type="text" id="customer-name" placeholder="Tu nombre" maxlength="80">
         <input type="text" id="customer-phone" placeholder="Tu celular (opcional)" maxlength="20">
-        <input type="date" id="delivery-date">
+
+        <div class="delivery-date-wrap" id="delivery-date-wrap">
+          <input
+            type="date"
+            id="delivery-date"
+            aria-label="Fecha de entrega"
+            title="Fecha de entrega"
+            required
+            onchange="updateDeliveryDateUI()"
+          >
+        </div>
+
         <textarea id="customer-notes" placeholder="Referencia o indicaciones de entrega (opcional)"></textarea>
       </div>
+
       <div class="cart-total-row">
         <span class="ct-label">Total del pedido</span>
         <span class="ct-value" id="cart-total">S/ 0.00</span>
       </div>
+
       <button id="wa-order-btn" class="wa-btn" onclick="submitOrder()">Guardar y pedir por WhatsApp</button>
       <button class="clear-btn" onclick="clearCart()">Vaciar carrito</button>
     </div>
@@ -604,7 +666,7 @@
 
 <script>
   const WA_NUMBER = "51964117919";
-  const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyq7YhCqIFfsKy2qjbajQmuYe_4yOPUKOSezfwItyoGMEMzEsXfSRcFL0HBFTBLxCn0Og/exec";
+  const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwf1mjYziZ3AABc7UCYch1QxoKC5uudfsLXRo1kuiSVHlFGKldb8e4zMdNe2HDe_aAEbA/exec";
   const productVariants = [
   {
     "id": 1,
@@ -1298,6 +1360,18 @@
     return `${d}/${m}/${y}`;
   }
 
+  function updateDeliveryDateUI() {
+    const input = document.getElementById("delivery-date");
+    const wrap = document.getElementById("delivery-date-wrap");
+    if (!input || !wrap) return;
+
+    if (input.value) {
+      wrap.classList.add("has-value");
+    } else {
+      wrap.classList.remove("has-value");
+    }
+  }
+
   function getOrderTimestamp() {
     const now = new Date();
 
@@ -1833,6 +1907,7 @@
     const input = document.getElementById("delivery-date");
     if (!input) return;
     input.min = getTodayLocalDate();
+    updateDeliveryDateUI();
   }
 
   setupCategoryButtons();
