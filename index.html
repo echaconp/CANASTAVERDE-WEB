@@ -264,8 +264,11 @@
     font-family: 'DM Sans', sans-serif;
     font-size: 14px;
     outline: none;
+    background: #fff;
+    color: var(--text);
   }
   .cart-form textarea { min-height: 74px; resize: vertical; }
+
   .cart-total-row {
     display: flex; justify-content: space-between; align-items: center;
     margin-bottom: 1rem;
@@ -280,6 +283,11 @@
     border: none; border-radius: var(--radius-lg);
     font-size: 16px; font-weight: 600; cursor: pointer;
   }
+  .wa-btn:disabled {
+    opacity: 0.75;
+    cursor: not-allowed;
+  }
+
   .clear-btn {
     display: block; width: 100%; margin-top: 8px;
     padding: 8px; background: none; border: none;
@@ -309,6 +317,8 @@
     padding: 10px 22px; border-radius: 10px;
     font-size: 14px; opacity: 0; pointer-events: none;
     transition: all .3s; z-index: 999;
+    text-align: center;
+    max-width: calc(100vw - 32px);
   }
   .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
@@ -550,6 +560,7 @@
       <div class="cart-form">
         <input type="text" id="customer-name" placeholder="Tu nombre" maxlength="80">
         <input type="text" id="customer-phone" placeholder="Tu celular (opcional)" maxlength="20">
+        <input type="date" id="delivery-date">
         <textarea id="customer-notes" placeholder="Referencia o indicaciones de entrega (opcional)"></textarea>
       </div>
       <div class="cart-total-row">
@@ -588,13 +599,12 @@
   <strong>🌿 La Canasta Verde</strong><br>
   Lunes a Sábado · 7:00 am – 6:00 pm<br>
   Pedidos por WhatsApp: <strong>+51 964 117 919</strong><br><br>
-  <small>© 2026 La Canasta Verde — Mercado fresco </small>
+  <small>© 2026 La Canasta Verde — Mercado fresco</small>
 </footer>
 
 <script>
   const WA_NUMBER = "51964117919";
   const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyq7YhCqIFfsKy2qjbajQmuYe_4yOPUKOSezfwItyoGMEMzEsXfSRcFL0HBFTBLxCn0Og/exec";
-
   const productVariants = [
   {
     "id": 1,
@@ -1270,9 +1280,22 @@
   let cart = {};
   let currentCat = "todos";
   let selectedProductKey = null;
+  let isSubmitting = false;
 
   function pad2(n) {
     return String(n).padStart(2, "0");
+  }
+
+  function getTodayLocalDate() {
+    const now = new Date();
+    return `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}`;
+  }
+
+  function formatDeliveryDate(dateString) {
+    if (!dateString) return "";
+    const [y, m, d] = dateString.split("-");
+    if (!y || !m || !d) return dateString;
+    return `${d}/${m}/${y}`;
   }
 
   function getOrderTimestamp() {
@@ -1639,12 +1662,13 @@
     document.getElementById("wa-float").href = `https://wa.me/${WA_NUMBER}?text=${floatMsg}`;
   }
 
-  function buildWhatsappMessage(customerName, customerPhone, customerNotes, totalPrice, orderCode, orderTimestamp) {
+  function buildWhatsappMessage(customerName, customerPhone, deliveryDate, customerNotes, totalPrice, orderCode, orderTimestamp) {
     const keys = Object.keys(cart);
     let msg = `¡Hola! Quiero hacer un pedido en *La Canasta Verde*:%0A%0A`;
     msg += `🧾 *Código de pedido:* ${orderCode}%0A`;
     msg += `📅 *Fecha de registro:* ${orderTimestamp.date}%0A`;
     msg += `⏰ *Hora de registro:* ${orderTimestamp.time}%0A`;
+    msg += `🚚 *Fecha de entrega:* ${formatDeliveryDate(deliveryDate)}%0A`;
     msg += `👤 *Nombre:* ${customerName}%0A`;
     if (customerPhone) msg += `📱 *Celular:* ${customerPhone}%0A`;
     if (customerNotes) msg += `📝 *Referencia:* ${customerNotes}%0A`;
@@ -1666,6 +1690,8 @@
   }
 
   async function submitOrder() {
+    if (isSubmitting) return;
+
     const keys = Object.keys(cart);
     if (!keys.length) {
       showToast("Agrega productos antes de enviar");
@@ -1674,11 +1700,18 @@
 
     const customerName = document.getElementById("customer-name").value.trim();
     const customerPhone = document.getElementById("customer-phone").value.trim();
+    const deliveryDate = document.getElementById("delivery-date").value;
     const customerNotes = document.getElementById("customer-notes").value.trim();
 
     if (!customerName) {
       showToast("Escribe tu nombre antes de enviar");
       document.getElementById("customer-name").focus();
+      return;
+    }
+
+    if (!deliveryDate) {
+      showToast("Selecciona la fecha de entrega");
+      document.getElementById("delivery-date").focus();
       return;
     }
 
@@ -1697,7 +1730,6 @@
     });
 
     const totalPrice = items.reduce((s, x) => s + x.subtotal, 0);
-
     const orderTimestamp = getOrderTimestamp();
     const orderCode = generateOrderCode();
 
@@ -1706,6 +1738,8 @@
       order_date: orderTimestamp.date,
       order_time: orderTimestamp.time,
       order_datetime: orderTimestamp.display,
+      delivery_date: deliveryDate,
+      delivery_date_formatted: formatDeliveryDate(deliveryDate),
       customer_name: customerName,
       customer_phone: customerPhone,
       customer_notes: customerNotes,
@@ -1713,6 +1747,11 @@
       items: items,
       created_at: orderTimestamp.iso
     };
+
+    const btn = document.getElementById("wa-order-btn");
+    isSubmitting = true;
+    btn.disabled = true;
+    btn.textContent = "Enviando...";
 
     try {
       if (APPS_SCRIPT_URL && !APPS_SCRIPT_URL.includes("PEGAR_AQUI")) {
@@ -1724,20 +1763,47 @@
           body: JSON.stringify(payload)
         });
       }
+
+      const waUrl = buildWhatsappMessage(
+        customerName,
+        customerPhone,
+        deliveryDate,
+        customerNotes,
+        totalPrice,
+        orderCode,
+        orderTimestamp
+      );
+
+      showToast("Pedido enviado. Redirigiendo a WhatsApp...");
+      setTimeout(() => {
+        window.location.href = waUrl;
+      }, 900);
+
     } catch (error) {
       console.error("No se pudo guardar el pedido:", error);
+
+      const waUrl = buildWhatsappMessage(
+        customerName,
+        customerPhone,
+        deliveryDate,
+        customerNotes,
+        totalPrice,
+        orderCode,
+        orderTimestamp
+      );
+
+      showToast("Pedido preparado. Redirigiendo a WhatsApp...");
+      setTimeout(() => {
+        window.location.href = waUrl;
+      }, 900);
+
+    } finally {
+      setTimeout(() => {
+        isSubmitting = false;
+        btn.disabled = false;
+        btn.textContent = "Guardar y pedir por WhatsApp";
+      }, 1500);
     }
-
-    const waUrl = buildWhatsappMessage(
-      customerName,
-      customerPhone,
-      customerNotes,
-      totalPrice,
-      orderCode,
-      orderTimestamp
-    );
-
-    window.open(waUrl, "_blank");
   }
 
   function openCart() {
@@ -1760,12 +1826,19 @@
     const t = document.getElementById("toast");
     t.textContent = msg;
     t.classList.add("show");
-    setTimeout(() => t.classList.remove("show"), 2000);
+    setTimeout(() => t.classList.remove("show"), 2200);
+  }
+
+  function setDeliveryDateMin() {
+    const input = document.getElementById("delivery-date");
+    if (!input) return;
+    input.min = getTodayLocalDate();
   }
 
   setupCategoryButtons();
   renderGrid();
   updateCartUI();
+  setDeliveryDateMin();
 </script>
 </body>
 </html>
